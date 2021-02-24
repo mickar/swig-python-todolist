@@ -1,0 +1,6 @@
+src/*.o
+src/*.so
+src/todolist_wrap.*
+src/todolist.py*
+*.swp
+*.swo
