@@ -1,3 +1,4 @@
+ROOT_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 SRC := src
 
 all:
@@ -8,5 +9,11 @@ all:
 
 clean:
 	rm -f ${SRC}/*.o ${SRC}/*.so ${SRC}/todolist_wrap.* ${SRC}/todolist.py*
+
+test:
+	echo "TEST 1:"
+	PYTHONPATH=$(ROOT_DIR)/src python example/test_01.py
+	echo "TEST 2:"
+	PYTHONPATH=$(ROOT_DIR)/src python example/test_02.py
 
 .PHONY: clean
