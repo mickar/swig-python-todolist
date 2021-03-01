@@ -2,5 +2,6 @@ src/*.o
 src/*.so
 src/todolist_wrap.*
 src/todolist.py*
+src/__pycache__
 *.swp
 *.swo
