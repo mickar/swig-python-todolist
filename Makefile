@@ -1,7 +1,11 @@
 ROOT_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 SRC := src
 
-CXXFLAGS= -c -fPIC `python3-config --cflags`
+PROJECT_NAME=todolist
+PYTHON_VERSION=3
+PYTHON=/usr/bin/python${PYTHON_VERSION}
+FILE?=
+CXXFLAGS= -c -fPIC `python${PYTHON_VERSION}-config --cflags`
 DEBUGFLAGS=
 
 all:
@@ -17,15 +21,26 @@ debug: DEBUGFLAGS += -DDEBUG -g -lefence
 debug: all
 
 tests:
-	@for file in $$(find ./examples -type f -name "*.py"); do \
+	@for filename in $$(find ./examples -type f -name "*.py"); do \
 		echo "------------------------------------------------------\n"; \
-		echo "\nTEST $${file} \n"; \
-		PYTHONPATH=$(ROOT_DIR)/src python3 $${file}; \
+		echo "\nTEST $${filename} \n"; \
+		PYTHONPATH=$(ROOT_DIR)/src $(PYTHON) $${filename}; \
 		echo "\n"; \
 	done
 
+test:
+	PYTHONPATH=$(ROOT_DIR)/src $(PYTHON) $(FILE)
+
+gdb:
+	PYTHONPATH=$(ROOT_DIR)/src gdb $(PYTHON) $(FILE)
+
+dis:
+	$(PYTHON) -m dis $(FILE)
 
 docker-run:
-	docker run -it --rm -v `pwd`:/usr/local/src/swig-python-todolist debian bash /usr/local/src/swig-python-todolist/build/devinit.sh
+	docker run -it --name $(PYTHON)-$(PROJECT_NAME) --rm -v `pwd`:/usr/local/src/swig-python-todolist debian bash /usr/local/src/swig-python-todolist/build/devinit.sh
+
+docker-attach:
+	docker exec -it $(PYTHON)-$(PROJECT_NAME) bash
 
 .PHONY: clean

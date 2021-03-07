@@ -22,6 +22,8 @@ class todolist {
 		void delTodo(const char* taskname);
 		void displayTodoList();
 		static const char* version();
+		static void UnderstandGILBlocked();
+		static void UnderstandGILNonBlocked();
 };
 
 #endif

@@ -1,6 +1,10 @@
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
+#include <Python.h>
+
 #include "todolist.h"
+
 
 todoerror::todoerror(const char *msg) {
 	strncpy(this->msg_, msg, 512);
@@ -44,5 +48,19 @@ void todolist::displayTodoList() {
 
 const char* todolist::version() {
 	return "Version TodoList0.1.0\n";
+}
+
+void todolist::UnderstandGILBlocked() {
+	printf("Begin\n");
+	sleep(10);
+	printf("End\n");
+}
+
+void todolist::UnderstandGILNonBlocked() {
+	printf("Begin\n");
+	Py_BEGIN_ALLOW_THREADS
+	sleep(10);
+	Py_END_ALLOW_THREADS
+	printf("End\n");
 }
 

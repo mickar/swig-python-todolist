@@ -5,3 +5,4 @@ src/todolist.py*
 src/__pycache__
 *.swp
 *.swo
+*.pyc
