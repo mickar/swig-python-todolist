@@ -38,7 +38,7 @@ dis:
 	$(PYTHON) -m dis $(FILE)
 
 docker-run:
-	docker run -it --name $(PYTHON)-$(PROJECT_NAME) --rm -v `pwd`:/usr/local/src/swig-python-todolist debian bash /usr/local/src/swig-python-todolist/build/devinit.sh
+	docker run -it --name python-$(PROJECT_NAME) --rm -v `pwd`:/usr/local/src/swig-python-todolist debian bash /usr/local/src/swig-python-todolist/build/devinit.sh
 
 docker-attach:
 	docker exec -it $(PYTHON)-$(PROJECT_NAME) bash

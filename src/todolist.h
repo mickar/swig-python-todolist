@@ -13,14 +13,15 @@ class todoerror {
 
 class todolist {
 	private:
+		std::string name;
 		std::map<std::string, std::string> todolist_;
 	public:
-		todolist();
+		todolist(const char *name = NULL);
 		~todolist();
 
 		void addTodo(const char* taskname, const char* tasktodo);  
 		void delTodo(const char* taskname);
-		void displayTodoList();
+		void dumpAllTodo();
 		static const char* version();
 		static void UnderstandGILBlocked();
 		static void UnderstandGILNonBlocked();

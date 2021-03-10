@@ -14,12 +14,15 @@ const char* todoerror::what() {
 	return this->msg_;
 }
 
-todolist::todolist(){
-	printf("Constructor\n");
+todolist::todolist(const char *str){
+	if (str != NULL) {
+		this->name = std::string(str);
+	}
+	printf("Constructor %s\n", this->name.c_str());
 }
 
 todolist::~todolist(){
-	printf("Destructor\n");
+	printf("Destructor %s\n", this->name.c_str());
 }
 
 void todolist::addTodo(const char* taskname, const char* tasktodo) {
@@ -42,8 +45,11 @@ void todolist::delTodo(const char* taskname){
 	printf("%s deleted\n", s2.c_str());
 }
 
-void todolist::displayTodoList() {
-
+void todolist::dumpAllTodo() {
+	printf("Dump All TODO [%s] :\n", this->name.c_str());
+	for (auto it = this->todolist_.begin(); it != this->todolist_.end(); ++it) {
+		printf("\t%s - %s\n", it->second.c_str(), it->first.c_str());
+	}
 }
 
 const char* todolist::version() {
