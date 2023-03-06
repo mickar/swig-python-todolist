@@ -5,7 +5,9 @@ cd /usr/local/src/swig-python-todolist
 apt-get update
 apt install -y build-essential vim make swig electric-fence gdb git procps
 apt install -y python3-pip python3 python3-setuptools python3-dbg python3-dev
-apt install -y python-pip python2.7 python2.7-setuptools python2-dbg python2-dev
+#apt install -y python-pip python2.7 python2.7-setuptools python2-dbg python2-dev
+apt install -y cmake libcurl libcurl-dev libcurlpp-dev zlib1g-dev pkg-config libgtest-dev libcivetweb-dev civetweb libbenchmark-dev libgmock-dev
+
 
 echo "" > ~/.viminfo
 echo "syn on" > ~/.vimrc

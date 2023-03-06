@@ -2,6 +2,7 @@
 #define TODOLIST_H
 
 #include <map>
+#include <string>
 
 class todoerror {
 	private:
