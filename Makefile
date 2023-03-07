@@ -5,16 +5,18 @@ PROJECT_NAME=todolist
 PYTHON_VERSION=3
 PYTHON=/usr/bin/python${PYTHON_VERSION}
 FILE?=
-CXXFLAGS= -c -fPIC  `python${PYTHON_VERSION}-config --cflags`
+CXXFLAGS= `python${PYTHON_VERSION}-config --cflags`
 CXXFLAGS_OPT= -I/usr/local/include/ -L/usr/local/lib/ -lopentelemetry_resources -lopentelemetry_common -lopentelemetry_metrics -lopentelemetry_exporter_prometheus -lprometheus-cpp-pull -lprometheus-cpp-core -lpthread -lm -lz -lc
 DEBUGFLAGS=
 
 all:
-	g++ ${DEBUGFLAGS} ${CXXFLAGS} ${SRC}/todolist.cc -o ${SRC}/todolist.o
-	g++ ${DEBUGFLAGS} -rdynamic ${CXXFLAGS} ${CXXFLAGS_OPT} ${SRC}/opt.cc -o ${SRC}/opt.o
+	g++ -c -fPIC ${DEBUGFLAGS} ${SRC}/todolist.cc -o ${SRC}/todolist.o ${CXXFLAGS}
 	swig -c++ -python -o ${SRC}/todolist_wrap.cxx ${SRC}/todolist.i
-	g++ ${DEBUGFLAGS} ${CXXFLAGS} -I${SRC}/ ${SRC}/todolist_wrap.cxx -o ${SRC}/todolist_wrap.o
-	g++ ${DEBUGFLAGS} -Xlinker -export-dynamic -shared ${SRC}/todolist.o ${SRC}/todolist_wrap.o ${SRC}/opt.o -o ${SRC}/_todolist.so
+	g++ -c -fPIC ${DEBUGFLAGS} -I${SRC}/ ${SRC}/todolist_wrap.cxx -o ${SRC}/todolist_wrap.o ${CXXFLAGS} ${CXXFLAGS_OPT}
+	g++ -c -fPIC ${DEBUGFLAGS} ${SRC}/opt.cc -o ${SRC}/opt.o ${CXXFLAGS} ${CXXFLAGS_OPT}
+	g++ -shared ${DEBUGFLAGS} ${SRC}/todolist.o ${SRC}/todolist_wrap.o ${SRC}/opt.o -o ${SRC}/_todolist.so ${CXXFLAGS} ${CXXFLAGS_OPT} ${DEBUGFLAGS}
+	g++ -c -fPIC ${DEBUGFLAGS} ${SRC}/opt_test.cc -o ${SRC}/opt_test.o ${CXXFLAGS} ${CXXFLAGS_OPT}
+	g++ ${DEBUGFLAGS} ${SRC}/opt_test.o ${SRC}/opt.o -o ${SRC}/opt_test ${CXXFLAGS} ${CXXFLAGS_OPT} ${DEBUGFLAGS}
 
 clean:
 	rm -f ${SRC}/*.o ${SRC}/*.so ${SRC}/todolist_wrap.* ${SRC}/todolist.py*
@@ -25,7 +27,8 @@ debug: all
 tests:
 	@for filename in $$(find ./examples -type f -name "*.py"); do \
 		echo "------------------------------------------------------\n"; \
-		echo "\nTEST $${filename} \n"; \
+		echo -n "\nTEST $${filename} - Command: "; \
+		echo 'PYTHONPATH=$(ROOT_DIR)/src $(PYTHON) $${filename}\n'; \
 		PYTHONPATH=$(ROOT_DIR)/src $(PYTHON) $${filename}; \
 		echo "\n"; \
 	done
@@ -40,7 +43,7 @@ dis:
 	$(PYTHON) -m dis $(FILE)
 
 docker-run:
-	docker run -it --name python-$(PROJECT_NAME) --rm -v `pwd`:/usr/local/src/swig-python-todolist debian:11 bash /usr/local/src/swig-python-todolist/build/devinit.sh
+	docker run -it --name python-$(PROJECT_NAME) --rm -v `pwd`:/usr/local/src/swig-python-todolist debian:10 bash /usr/local/src/swig-python-todolist/build/devinit.sh
 
 docker-attach:
 	docker exec -it $(PYTHON)-$(PROJECT_NAME) bash

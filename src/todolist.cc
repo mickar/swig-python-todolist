@@ -4,6 +4,7 @@
 #include <Python.h>
 
 #include "todolist.h"
+#include "opt.h"
 
 
 todoerror::todoerror(const char *msg) {
@@ -18,6 +19,8 @@ todolist::todolist(const char *str){
 	if (str != NULL) {
 		this->name = std::string(str);
 	}
+	auto opt = new OPT("127.0.0.1:8081", "opt_todolist");
+	opt->CreateMetricGauge("nbtodolist", "up and down meter");
 	printf("Constructor %s\n", this->name.c_str());
 }
 
@@ -31,6 +34,7 @@ void todolist::addTodo(const char* taskname, const char* tasktodo) {
 	if (it != this->todolist_.end()) {
 		throw todoerror("Alreay exist");
 	}
+	OPT::UpdateMeterGaugeAdd("nbtodolist", 1);
 	this->todolist_.insert(std::pair<std::string,std::string>(s1, s2));
 }
 
@@ -42,6 +46,7 @@ void todolist::delTodo(const char* taskname){
 	}
 	s2 = it->second;
 	this->todolist_.erase(it);
+	OPT::UpdateMeterGaugeAdd("nbtodolist", -1);
 	printf("%s deleted\n", s2.c_str());
 }
 

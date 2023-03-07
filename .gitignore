@@ -5,6 +5,7 @@ src/todolist.py*
 src/__pycache__
 opentelemetry-cpp
 ARCHIVE/
+src/opt_test
 TODO
 *.swp
 *.swo
