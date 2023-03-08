@@ -19,8 +19,8 @@ todolist::todolist(const char *str){
 	if (str != NULL) {
 		this->name = std::string(str);
 	}
-	auto opt = new OPT("127.0.0.1:8081", "opt_todolist");
-	opt->CreateMetricGauge("nbtodolist", "up and down meter");
+	OPT::Init("127.0.0.1:8081", "opt_todolist");
+	OPT::CreateMetricGauge("nbtodolist", "up and down meter");
 	printf("Constructor %s\n", this->name.c_str());
 }
 

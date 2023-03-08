@@ -6,6 +6,7 @@ src/__pycache__
 opentelemetry-cpp
 ARCHIVE/
 src/opt_test
+core
 TODO
 *.swp
 *.swo

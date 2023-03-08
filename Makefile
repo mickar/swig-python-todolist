@@ -10,13 +10,13 @@ CXXFLAGS_OPT= -I/usr/local/include/ -L/usr/local/lib/ -lopentelemetry_resources 
 DEBUGFLAGS=
 
 all:
-	g++ -c -fPIC ${DEBUGFLAGS} ${SRC}/todolist.cc -o ${SRC}/todolist.o ${CXXFLAGS}
+	g++ -std=c++17 -c -fPIC ${DEBUGFLAGS} ${SRC}/todolist.cc -o ${SRC}/todolist.o ${CXXFLAGS}
 	swig -c++ -python -o ${SRC}/todolist_wrap.cxx ${SRC}/todolist.i
-	g++ -c -fPIC ${DEBUGFLAGS} -I${SRC}/ ${SRC}/todolist_wrap.cxx -o ${SRC}/todolist_wrap.o ${CXXFLAGS} ${CXXFLAGS_OPT}
-	g++ -c -fPIC ${DEBUGFLAGS} ${SRC}/opt.cc -o ${SRC}/opt.o ${CXXFLAGS} ${CXXFLAGS_OPT}
-	g++ -shared ${DEBUGFLAGS} ${SRC}/todolist.o ${SRC}/todolist_wrap.o ${SRC}/opt.o -o ${SRC}/_todolist.so ${CXXFLAGS} ${CXXFLAGS_OPT} ${DEBUGFLAGS}
-	g++ -c -fPIC ${DEBUGFLAGS} ${SRC}/opt_test.cc -o ${SRC}/opt_test.o ${CXXFLAGS} ${CXXFLAGS_OPT}
-	g++ ${DEBUGFLAGS} ${SRC}/opt_test.o ${SRC}/opt.o -o ${SRC}/opt_test ${CXXFLAGS} ${CXXFLAGS_OPT} ${DEBUGFLAGS}
+	g++ -std=c++17 -c -fPIC ${DEBUGFLAGS} -I${SRC}/ ${SRC}/todolist_wrap.cxx -o ${SRC}/todolist_wrap.o ${CXXFLAGS} ${CXXFLAGS_OPT}
+	g++ -std=c++17 -c -fPIC ${DEBUGFLAGS} ${SRC}/opt.cc -o ${SRC}/opt.o ${CXXFLAGS} ${CXXFLAGS_OPT}
+	g++ -std=c++17 -shared ${DEBUGFLAGS} ${SRC}/todolist.o ${SRC}/todolist_wrap.o ${SRC}/opt.o -o ${SRC}/_todolist.so ${CXXFLAGS} ${CXXFLAGS_OPT} ${DEBUGFLAGS}
+	g++ -std=c++17 -c -fPIC ${DEBUGFLAGS} ${SRC}/opt_test.cc -o ${SRC}/opt_test.o ${CXXFLAGS} ${CXXFLAGS_OPT}
+	g++ -std=c++17 ${DEBUGFLAGS} ${SRC}/opt_test.o ${SRC}/opt.o -o ${SRC}/opt_test ${CXXFLAGS} ${CXXFLAGS_OPT} ${DEBUGFLAGS}
 
 clean:
 	rm -f ${SRC}/*.o ${SRC}/*.so ${SRC}/todolist_wrap.* ${SRC}/todolist.py*

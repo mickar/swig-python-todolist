@@ -1,4 +1,8 @@
 #include <memory>
+#include <shared_mutex>
+#include <typeindex>
+#include <typeinfo>
+#include <any>
 #include "opt.h"
 
 static std::string _profilName = "";
@@ -12,10 +16,25 @@ namespace metrics_exporter = opentelemetry::exporter::metrics;
 namespace metrics_api = opentelemetry::metrics;
 
 /// SetLogLevel
+std::shared_mutex _mutex;
+static std::map<std::string, std::optional<std::type_index>> _mapType;
+static std::map<std::string, std::any> _mapAny;
+static std::map<std::string, opentelemetry::nostd::unique_ptr<opentelemetry::metrics::UpDownCounter<double>>> _mapGauge;
+static std::map<std::string, opentelemetry::nostd::unique_ptr<opentelemetry::metrics::Counter<double>>> _mapGaugeLastValue;
+static std::map<std::string, opentelemetry::nostd::unique_ptr<opentelemetry::metrics::Counter<double>>> _mapCounter;
+static std::map<std::string, opentelemetry::nostd::unique_ptr<opentelemetry::metrics::Histogram<double>>> _mapHistogram;
+static std::shared_ptr<opentelemetry::sdk::metrics::MeterProvider> _p;
+static opentelemetry::nostd::shared_ptr<opentelemetry::metrics::MeterProvider> _provider;
+static opentelemetry::nostd::shared_ptr<opentelemetry::metrics::Meter> _meter;
 
-OPT::~OPT() {}
+void OPT::Shutdown()
+{
+	_p->Shutdown();
+	std::shared_ptr<metrics_api::MeterProvider> none;
+	metrics_api::Provider::SetMeterProvider(none);
+}
 
-OPT::OPT(const char* url, const char* profilName)
+void OPT::Init(const char* url, const char* profilName)
 {
 	if (url == NULL || strcmp(url, "") == 0) {
 		// Error
@@ -27,54 +46,64 @@ OPT::OPT(const char* url, const char* profilName)
 	}
 	if (_profilName != "") {
 		// Error
-		//this->provider = metrics_api::Provider::GetMeterProvider();
-		//this->p = std::static_pointer_cast<metrics_sdk::MeterProvider>(this->provider);
-		//this->meter = provider->GetMeter(_profilName, "1.2.0");
 		return;
 	}
 
 	_profilName = std::string(profilName);
 
 	// Set URL on opts
-	opentelemetry::exporter::metrics::PrometheusExporterOptions opts;
+	metrics_exporter::PrometheusExporterOptions opts;
 	opts.url = std::string(url);
 
 	// Init exporter and reader
-	auto exporter = std::unique_ptr<metrics_sdk::PushMetricExporter>{new metrics_exporter::PrometheusExporter(opts)};
+	std::unique_ptr<metrics_sdk::PushMetricExporter> exporter{new metrics_exporter::PrometheusExporter(opts)};
 	opentelemetry::sdk::metrics::PeriodicExportingMetricReaderOptions options;
-	options.export_interval_millis = std::chrono::milliseconds(1000);
-	options.export_timeout_millis= std::chrono::milliseconds(500);
-	auto reader = std::unique_ptr<metrics_sdk::MetricReader>{new metrics_sdk::PeriodicExportingMetricReader(std::move(exporter), options)};
+	options.export_interval_millis = std::chrono::milliseconds(2000);
+	options.export_timeout_millis= std::chrono::milliseconds(1000);
+	std::unique_ptr<metrics_sdk::MetricReader> reader{new metrics_sdk::PeriodicExportingMetricReader(std::move(exporter), options)};
 
 	// Initialize provider and set the global MeterProvider
 	auto provider = std::shared_ptr<metrics_api::MeterProvider>(new metrics_sdk::MeterProvider());
-	this->p = std::static_pointer_cast<metrics_sdk::MeterProvider>(provider);
-	p->AddMetricReader(std::move(reader));
+	_p = std::static_pointer_cast<metrics_sdk::MeterProvider>(provider);
+	_p->AddMetricReader(std::move(reader));
 	metrics_api::Provider::SetMeterProvider(std::move(provider));
+	// Save pointers provider and meter
+	_provider = metrics_api::Provider::GetMeterProvider();
+	_meter = _provider->GetMeter(_profilName, _version);
 }
 
-void OPT::CreateMetricGauge(const char* name, const char* description)
+void OPT::CreateMetricGauge(const char* _name, const char* description)
 {
-	if (name == NULL || strcmp(name, "") == 0) {
+	std::unique_lock lock(_mutex);
+	if (_name == NULL || strcmp(_name, "") == 0) {
+		// Error
 		return;
 	}
 	if (description == NULL || strcmp(description, "") == 0) {
+		// Error
 		return;
 	}
-	std::string gauge_name = std::string(name) + std::string("_gauge");
+	std::string name = std::string(_name);
+	std::string gauge_name = name + std::string("_gauge");
 	std::string gauge_description = std::string(description);
-	std::unique_ptr<metrics_sdk::InstrumentSelector> gauge_instrument_selector{
+	// Create view
+	std::unique_ptr<metrics_sdk::InstrumentSelector> instrument_selector{
 		new metrics_sdk::InstrumentSelector(metrics_sdk::InstrumentType::kUpDownCounter, gauge_name)};
-	std::unique_ptr<metrics_sdk::MeterSelector> gauge_meter_selector{
+	std::unique_ptr<metrics_sdk::MeterSelector> meter_selector{
 		new metrics_sdk::MeterSelector(_profilName, _version, _schema)};
-	std::unique_ptr<metrics_sdk::View> gauge_sum_view{
+	std::unique_ptr<metrics_sdk::View> sum_view{
 		new metrics_sdk::View{gauge_name, gauge_description, metrics_sdk::AggregationType::kSum}};
-	this->p->AddView(std::move(gauge_instrument_selector), std::move(gauge_meter_selector), std::move(gauge_sum_view));
+	_p->AddView(std::move(instrument_selector), std::move(meter_selector), std::move(sum_view));
+	// Create and save meter
+	opentelemetry::nostd::unique_ptr<opentelemetry::metrics::UpDownCounter<double>> double_gauge = _meter->CreateDoubleUpDownCounter(gauge_name);
+	_mapType[name] = typeid(double_gauge);
+	_mapGauge[name] = std::move(double_gauge);
 }
 
-void OPT::CreateMetricGaugeLastValue(const char* name, const char* description)
+void OPT::CreateMetricGaugeLastValue(const char* _name, const char* description)
 {
-	if (name == NULL || strcmp(name, "") == 0) {
+	std::unique_lock lock(_mutex);
+	if (_name == NULL || strcmp(_name, "") == 0) {
 		// Error
 		return;
 	}
@@ -82,20 +111,27 @@ void OPT::CreateMetricGaugeLastValue(const char* name, const char* description)
 		// Error
 		return;
 	}
-	std::string gauge_name = std::string(name) + std::string("_gauge");
+	std::string name = std::string(_name);
+	std::string gauge_name = name + std::string("_gauge");
 	std::string gauge_description = std::string(description);
+	// Create view
 	std::unique_ptr<metrics_sdk::InstrumentSelector> instrument_selector{
 		new metrics_sdk::InstrumentSelector(metrics_sdk::InstrumentType::kCounter, gauge_name)};
 	std::unique_ptr<metrics_sdk::MeterSelector> meter_selector{
 		new metrics_sdk::MeterSelector(_profilName, _version, _schema)};
 	std::unique_ptr<metrics_sdk::View> sum_view{
 		new metrics_sdk::View{gauge_name, gauge_description, metrics_sdk::AggregationType::kLastValue}};
-	this->p->AddView(std::move(instrument_selector), std::move(meter_selector), std::move(sum_view));
+	_p->AddView(std::move(instrument_selector), std::move(meter_selector), std::move(sum_view));
+	// Create and save meter
+	opentelemetry::nostd::unique_ptr<opentelemetry::metrics::Counter<double>> double_gauge = _meter->CreateDoubleCounter(gauge_name);
+	_mapType[name] = typeid(double_gauge);
+	_mapGaugeLastValue[name] = std::move(double_gauge);
 }
 
-void OPT::CreateMetricCounter(const char* name, const char* description)
+void OPT::CreateMetricCounter(const char* _name, const char* description)
 {
-	if (name == NULL || strcmp(name, "") == 0) {
+	std::unique_lock lock(_mutex);
+	if (_name == NULL || strcmp(_name, "") == 0) {
 		// Error
 		return;
 	}
@@ -103,21 +139,27 @@ void OPT::CreateMetricCounter(const char* name, const char* description)
 		// Error
 		return;
 	}
-	std::string counter_name = std::string(name) + std::string("_counter");
+	std::string name = std::string(_name);
+	std::string counter_name = name + std::string("_counter");
 	std::string counter_description = std::string(description);
+	// Create view
 	std::unique_ptr<metrics_sdk::InstrumentSelector> instrument_selector{
 		new metrics_sdk::InstrumentSelector(metrics_sdk::InstrumentType::kCounter, counter_name)};
 	std::unique_ptr<metrics_sdk::MeterSelector> meter_selector{
 		new metrics_sdk::MeterSelector(_profilName, _version, _schema)};
 	std::unique_ptr<metrics_sdk::View> sum_view{
 		new metrics_sdk::View{counter_name, counter_description, metrics_sdk::AggregationType::kSum}};
-	this->p->AddView(std::move(instrument_selector), std::move(meter_selector), std::move(sum_view));
-
+	_p->AddView(std::move(instrument_selector), std::move(meter_selector), std::move(sum_view));
+	// Create and save meter
+	opentelemetry::nostd::unique_ptr<opentelemetry::metrics::Counter<double>> double_counter = _meter->CreateDoubleCounter(counter_name);
+	_mapType[name] = typeid(double_counter);
+	_mapCounter[name] = std::move(double_counter);
 }
 
-void OPT::CreateMetricHistogram(const char* name, const char* description)
+void OPT::CreateMetricHistogram(const char* _name, const char* description)
 {
-	if (name == NULL || strcmp(name, "") == 0) {
+	std::unique_lock lock(_mutex);
+	if (_name == NULL || strcmp(_name, "") == 0) {
 		// Error
 		return;
 	}
@@ -125,7 +167,9 @@ void OPT::CreateMetricHistogram(const char* name, const char* description)
 		// Error
 		return;
 	}
-	std::string histogram_name = std::string(name) + std::string("_histogram");
+	// Already exist
+	std::string name = std::string(_name);
+	std::string histogram_name = name + std::string("_histogram");
 	std::string histogram_description = std::string(description);
 	std::unique_ptr<metrics_sdk::InstrumentSelector> histogram_instrument_selector{
 		new metrics_sdk::InstrumentSelector(metrics_sdk::InstrumentType::kHistogram, histogram_name)};
@@ -133,11 +177,16 @@ void OPT::CreateMetricHistogram(const char* name, const char* description)
 		new metrics_sdk::MeterSelector(_profilName, _version, _schema)};
 	std::unique_ptr<metrics_sdk::View> histogram_view{
 		new metrics_sdk::View{histogram_name, histogram_description, metrics_sdk::AggregationType::kHistogram}};
-	this->p->AddView(std::move(histogram_instrument_selector), std::move(histogram_meter_selector), std::move(histogram_view));
+	_p->AddView(std::move(histogram_instrument_selector), std::move(histogram_meter_selector), std::move(histogram_view));
+	// Create and save meter
+	opentelemetry::nostd::unique_ptr<opentelemetry::metrics::Histogram<double>> double_histogram = _meter->CreateDoubleHistogram(histogram_name);
+	_mapType[name] = typeid(double_histogram);
+	_mapHistogram[name] = std::move(double_histogram);
 }
 
 void OPT::UpdateMeterGaugeAdd(const char* name, double val, std::map<std::string, std::string> labels)
 {
+	std::unique_lock lock(_mutex);
 	if (_profilName == "") {
 		// Error
 		return;
@@ -147,18 +196,26 @@ void OPT::UpdateMeterGaugeAdd(const char* name, double val, std::map<std::string
 		return;
 	}
 	std::string gauge_name = std::string(name) + std::string("_gauge");
-	// Init
-	auto provider = metrics_api::Provider::GetMeterProvider();
-	auto meter = provider->GetMeter(_profilName, _version);
-	// Update
+	// Init somes vars
 	auto context = opentelemetry::context::Context{};
-	auto double_gauge = meter->CreateDoubleUpDownCounter(gauge_name);
 	auto labelkv = opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
-	double_gauge->Add(val, labelkv, context);
+	// Update
+	auto type = _mapType[name];
+	if (type.value_or(typeid(int)).hash_code() != typeid(opentelemetry::nostd::unique_ptr<opentelemetry::metrics::UpDownCounter<double>>).hash_code()) {
+		// Error
+		return;
+	}
+	auto search = _mapGauge.find(name);
+	if (search == _mapGauge.end()) {
+		// Error
+		return;
+	}
+	search->second->Add(val, labelkv, context);
 }
 
 void OPT::UpdateMeterGaugeLastValueSet(const char* name, double val, std::map<std::string, std::string> labels)
 {
+	std::unique_lock lock(_mutex);
 	if (_profilName == "") {
 		// Error
 		return;
@@ -168,19 +225,27 @@ void OPT::UpdateMeterGaugeLastValueSet(const char* name, double val, std::map<st
 		return;
 	}
 	std::string gauge_name = std::string(name) + std::string("_gauge");
-	// Init
-	auto provider = metrics_api::Provider::GetMeterProvider();
-	auto meter = provider->GetMeter(_profilName, _version);
-	// Update value
+	// Init somes vars
 	auto context = opentelemetry::context::Context{};
-	auto double_gauge = meter->CreateDoubleUpDownCounter(gauge_name);
 	auto labelkv = opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
-	double_gauge->Add(val, labelkv, context);
+	// Update
+	auto type = _mapType[name];
+	if (type.value_or(typeid(int)).hash_code() != typeid(opentelemetry::nostd::unique_ptr<opentelemetry::metrics::Counter<double>>).hash_code()) {
+		// Error
+		return;
+	}
+	auto search = _mapGaugeLastValue.find(name);
+	if (search == _mapGaugeLastValue.end()) {
+		// Error
+		return;
+	}
+	search->second->Add(val, labelkv, context);
 
 }
 
 void OPT::UpdateMeterCounterAdd(const char* name, double val, std::map<std::string, std::string> labels)
 {
+	std::unique_lock lock(_mutex);
 	if (_profilName == "") {
 		// Error
 		return;
@@ -190,18 +255,26 @@ void OPT::UpdateMeterCounterAdd(const char* name, double val, std::map<std::stri
 		return;
 	}
 	std::string counter_name = std::string(name) + std::string("_counter");
-	// Init
-	auto provider = metrics_api::Provider::GetMeterProvider();
-	auto meter = provider->GetMeter(_profilName, _version);
-	// Update value
+	// Init somes vars
 	auto context = opentelemetry::context::Context{};
-	auto double_counter = meter->CreateDoubleCounter(counter_name);
 	auto labelkv = opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
-	double_counter->Add(val, labelkv, context);
+	// Update
+	auto type = _mapType[name];
+	if (type.value_or(typeid(int)).hash_code() != typeid(opentelemetry::nostd::unique_ptr<opentelemetry::metrics::Counter<double>>).hash_code()) {
+		// Error
+		return;
+	}
+	auto search = _mapCounter.find(name);
+	if (search == _mapCounter.end()) {
+		// Error
+		return;
+	}
+	search->second->Add(val, labelkv, context);
 }
 
 void OPT::UpdateMeterHistogramRecord(const char* name, double val, std::map<std::string, std::string> labels)
 {
+	std::unique_lock lock(_mutex);
 	if (_profilName == "") {
 		// Error
 		return;
@@ -211,14 +284,21 @@ void OPT::UpdateMeterHistogramRecord(const char* name, double val, std::map<std:
 		return;
 	}
 	std::string histogram_name = std::string(name) + std::string("_histogram");
-	// Init
-	auto provider = metrics_api::Provider::GetMeterProvider();
-	auto meter = provider->GetMeter(_profilName, _version);
-	// Update value
+	// Init somes vars
 	auto context = opentelemetry::context::Context{};
-	auto histogram_counter = meter->CreateDoubleHistogram(histogram_name);
 	auto labelkv = opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
-	histogram_counter->Record(val, labelkv, context);
+	// Update
+	auto type = _mapType[name];
+	if (type.value_or(typeid(int)).hash_code() != typeid(opentelemetry::nostd::unique_ptr<opentelemetry::metrics::Histogram<double>>).hash_code()) {
+		// Error
+		return;
+	}
+	auto search = _mapHistogram.find(name);
+	if (search == _mapHistogram.end()) {
+		// Error
+		return;
+	}
+	search->second->Record(val, labelkv, context);
 }
 
 void OPT::UpdateMeterGaugeAdd(const char* name, double val)
