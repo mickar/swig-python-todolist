@@ -13,18 +13,19 @@
 
 class OPT {
 	private:
+		std::shared_ptr<opentelemetry::sdk::metrics::MeterProvider> _p;
 	public:
-		OPT() = delete;
-		~OPT() = delete;
+		OPT(const char* url, const char* profilName);
+		~OPT();
 
-		static void Init(const char* url, const char* profilName);
+		//static void Init(const char* url, const char* profilName);
 		static void Shutdown();
 
 		// Create metric
-		static void CreateMetricGauge(const char* name, const char* description);
-		static void CreateMetricGaugeLastValue(const char* name, const char* description);
-		static void CreateMetricCounter(const char* name, const char* description);
-		static void CreateMetricHistogram(const char* name, const char* description);
+		void CreateMetricGauge(const char* name, const char* description);
+		void CreateMetricGaugeLastValue(const char* name, const char* description);
+		void CreateMetricCounter(const char* name, const char* description);
+		void CreateMetricHistogram(const char* name, const char* description);
 
 		// Update
 		static void UpdateMeterGaugeAdd(const char* name, double val, std::map<std::string, std::string> labels);

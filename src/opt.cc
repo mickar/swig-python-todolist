@@ -16,25 +16,21 @@ namespace metrics_exporter = opentelemetry::exporter::metrics;
 namespace metrics_api = opentelemetry::metrics;
 
 /// SetLogLevel
-std::shared_mutex _mutex;
+static std::shared_mutex _mutex;
 static std::map<std::string, std::optional<std::type_index>> _mapType;
-static std::map<std::string, std::any> _mapAny;
 static std::map<std::string, opentelemetry::nostd::unique_ptr<opentelemetry::metrics::UpDownCounter<double>>> _mapGauge;
 static std::map<std::string, opentelemetry::nostd::unique_ptr<opentelemetry::metrics::Counter<double>>> _mapGaugeLastValue;
 static std::map<std::string, opentelemetry::nostd::unique_ptr<opentelemetry::metrics::Counter<double>>> _mapCounter;
 static std::map<std::string, opentelemetry::nostd::unique_ptr<opentelemetry::metrics::Histogram<double>>> _mapHistogram;
-static std::shared_ptr<opentelemetry::sdk::metrics::MeterProvider> _p;
-static opentelemetry::nostd::shared_ptr<opentelemetry::metrics::MeterProvider> _provider;
-static opentelemetry::nostd::shared_ptr<opentelemetry::metrics::Meter> _meter;
 
 void OPT::Shutdown()
 {
-	_p->Shutdown();
+	_profilName = "";
 	std::shared_ptr<metrics_api::MeterProvider> none;
 	metrics_api::Provider::SetMeterProvider(none);
 }
 
-void OPT::Init(const char* url, const char* profilName)
+OPT::OPT(const char* url, const char* profilName)
 {
 	if (url == NULL || strcmp(url, "") == 0) {
 		// Error
@@ -67,9 +63,6 @@ void OPT::Init(const char* url, const char* profilName)
 	_p = std::static_pointer_cast<metrics_sdk::MeterProvider>(provider);
 	_p->AddMetricReader(std::move(reader));
 	metrics_api::Provider::SetMeterProvider(std::move(provider));
-	// Save pointers provider and meter
-	_provider = metrics_api::Provider::GetMeterProvider();
-	_meter = _provider->GetMeter(_profilName, _version);
 }
 
 void OPT::CreateMetricGauge(const char* _name, const char* description)
@@ -95,6 +88,8 @@ void OPT::CreateMetricGauge(const char* _name, const char* description)
 		new metrics_sdk::View{gauge_name, gauge_description, metrics_sdk::AggregationType::kSum}};
 	_p->AddView(std::move(instrument_selector), std::move(meter_selector), std::move(sum_view));
 	// Create and save meter
+	auto _provider = metrics_api::Provider::GetMeterProvider();
+	auto _meter = _provider->GetMeter(_profilName, _version);
 	opentelemetry::nostd::unique_ptr<opentelemetry::metrics::UpDownCounter<double>> double_gauge = _meter->CreateDoubleUpDownCounter(gauge_name);
 	_mapType[name] = typeid(double_gauge);
 	_mapGauge[name] = std::move(double_gauge);
@@ -123,6 +118,8 @@ void OPT::CreateMetricGaugeLastValue(const char* _name, const char* description)
 		new metrics_sdk::View{gauge_name, gauge_description, metrics_sdk::AggregationType::kLastValue}};
 	_p->AddView(std::move(instrument_selector), std::move(meter_selector), std::move(sum_view));
 	// Create and save meter
+	auto _provider = metrics_api::Provider::GetMeterProvider();
+	auto _meter = _provider->GetMeter(_profilName, _version);
 	opentelemetry::nostd::unique_ptr<opentelemetry::metrics::Counter<double>> double_gauge = _meter->CreateDoubleCounter(gauge_name);
 	_mapType[name] = typeid(double_gauge);
 	_mapGaugeLastValue[name] = std::move(double_gauge);
@@ -151,6 +148,8 @@ void OPT::CreateMetricCounter(const char* _name, const char* description)
 		new metrics_sdk::View{counter_name, counter_description, metrics_sdk::AggregationType::kSum}};
 	_p->AddView(std::move(instrument_selector), std::move(meter_selector), std::move(sum_view));
 	// Create and save meter
+	auto _provider = metrics_api::Provider::GetMeterProvider();
+	auto _meter = _provider->GetMeter(_profilName, _version);
 	opentelemetry::nostd::unique_ptr<opentelemetry::metrics::Counter<double>> double_counter = _meter->CreateDoubleCounter(counter_name);
 	_mapType[name] = typeid(double_counter);
 	_mapCounter[name] = std::move(double_counter);
@@ -179,6 +178,8 @@ void OPT::CreateMetricHistogram(const char* _name, const char* description)
 		new metrics_sdk::View{histogram_name, histogram_description, metrics_sdk::AggregationType::kHistogram}};
 	_p->AddView(std::move(histogram_instrument_selector), std::move(histogram_meter_selector), std::move(histogram_view));
 	// Create and save meter
+	auto _provider = metrics_api::Provider::GetMeterProvider();
+	auto _meter = _provider->GetMeter(_profilName, _version);
 	opentelemetry::nostd::unique_ptr<opentelemetry::metrics::Histogram<double>> double_histogram = _meter->CreateDoubleHistogram(histogram_name);
 	_mapType[name] = typeid(double_histogram);
 	_mapHistogram[name] = std::move(double_histogram);

@@ -4,12 +4,12 @@
 
 int main() {
 	std::cout << "Init" << std::endl;
-
-	OPT::Init("127.0.0.1:8081", "opt_todolist");
-	OPT::CreateMetricGauge("mygaugemeter", "DESC Gauge with UP and DOWN");
-	OPT::CreateMetricGaugeLastValue("mygaugelastvaluemeter", "DESC Gauge with Last Value");
-	OPT::CreateMetricCounter("mycountermeter", "DESC Gauge with UP and DOWN");
-
+{
+	auto opt = new OPT("127.0.0.1:8081", "opt_todolist");
+	opt->CreateMetricGauge("mygaugemeter", "DESC Gauge with UP and DOWN");
+	opt->CreateMetricGaugeLastValue("mygaugelastvaluemeter", "DESC Gauge with Last Value");
+	opt->CreateMetricCounter("mycountermeter", "DESC Gauge with UP and DOWN");
+}
 	sleep(1);
 
 	std::cout << "Updates metrics" << std::endl;
