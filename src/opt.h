@@ -11,31 +11,71 @@
 #include <opentelemetry/context/context.h>
 #include <opentelemetry/nostd/shared_ptr.h>
 
-class OPT {
+#include <opentelemetry/logs/provider.h>
+#include <opentelemetry/sdk/common/global_log_handler.h>
+#include <opentelemetry/sdk/logs/logger_provider_factory.h>
+#include <opentelemetry/logs/provider.h>
+#include <opentelemetry/sdk/version/version.h>
+#include <opentelemetry/trace/provider.h>
+
+
+enum class LogLevel
+{
+	Error = 0,
+	Warning,
+	Info,
+	Debug
+};
+
+class Traces {
+	private:
+		static void SampleFunction1();
+		static void SampleFunction2();
+	protected:
+		static opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> GetTracer();
+	public:
+		static void Init(const std::string &url);
+		static void SampleCreateSpan();
+		static void SampleErrorCreateSpan();
+		static void SampleScopeCreateSpan();
+};
+
+class Logs {
+	private:
+	protected:
+		static opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger> GetLogger();
+	public:
+		static void Init(const std::string &url);
+		static void SetLogLevel(LogLevel &l);
+		static void Info(void);
+		static void Error(void);
+};
+
+class Metrics {
 	private:
 		std::shared_ptr<opentelemetry::sdk::metrics::MeterProvider> _p;
 	public:
-		OPT(const char* url, const char* profilName);
-		~OPT();
+		Metrics(const std::string &url, const std::string &profilName);
+		~Metrics(){};
 
-		//static void Init(const char* url, const char* profilName);
+		//static void Init(const std::string &url, const std::string &profilName);
 		static void Shutdown();
 
 		// Create metric
-		void CreateMetricGauge(const char* name, const char* description);
-		void CreateMetricGaugeLastValue(const char* name, const char* description);
-		void CreateMetricCounter(const char* name, const char* description);
-		void CreateMetricHistogram(const char* name, const char* description);
+		void CreateMetricGauge(const std::string &name, const std::string &description);
+		void CreateMetricGaugeLastValue(const std::string &name, const std::string &description);
+		void CreateMetricCounter(const std::string &name, const std::string &description);
+		void CreateMetricHistogram(const std::string &name, const std::string &description);
 
 		// Update
-		static void UpdateMeterGaugeAdd(const char* name, double val, std::map<std::string, std::string> labels);
-		static void UpdateMeterGaugeLastValueSet(const char* name, double val, std::map<std::string, std::string> labels);
-		static void UpdateMeterCounterAdd(const char* name, double val, std::map<std::string, std::string> labels);
-		static void UpdateMeterHistogramRecord(const char* name, double val, std::map<std::string, std::string> labels);
-		static void UpdateMeterGaugeAdd(const char* name, double val);
-		static void UpdateMeterGaugeLastValueSet(const char* name, double val);
-		static void UpdateMeterCounterAdd(const char* name, double val);
-		static void UpdateMeterHistogramRecord(const char* name, double val);
+		static void UpdateMeterGaugeAdd(const std::string &name, double val, std::map<std::string, std::string> labels);
+		static void UpdateMeterGaugeLastValueSet(const std::string &name, double val, std::map<std::string, std::string> labels);
+		static void UpdateMeterCounterAdd(const std::string &name, double val, std::map<std::string, std::string> labels);
+		static void UpdateMeterHistogramRecord(const std::string &name, double val, std::map<std::string, std::string> labels);
+		static void UpdateMeterGaugeAdd(const std::string &name, double val);
+		static void UpdateMeterGaugeLastValueSet(const std::string &name, double val);
+		static void UpdateMeterCounterAdd(const std::string &name, double val);
+		static void UpdateMeterHistogramRecord(const std::string &name, double val);
 };
 
 #endif

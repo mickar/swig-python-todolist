@@ -9,11 +9,182 @@ static std::string _profilName = "";
 static std::string _version = "1.2.0";
 static std::string _schema = "https://opentelemetry.io/schemas/1.2.0";
 
-namespace nostd	= opentelemetry::nostd;
 namespace metrics_sdk = opentelemetry::sdk::metrics;
 namespace common = opentelemetry::common;
 namespace metrics_exporter = opentelemetry::exporter::metrics;
 namespace metrics_api = opentelemetry::metrics;
+
+
+#include <opentelemetry/exporters/otlp/otlp_http_exporter_factory.h>
+#include <opentelemetry/exporters/otlp/otlp_http_log_record_exporter_factory.h>
+#include <opentelemetry/exporters/otlp/otlp_http_log_record_exporter_options.h>
+#include <opentelemetry/logs/provider.h>
+#include <opentelemetry/sdk/common/global_log_handler.h>
+#include <opentelemetry/sdk/trace/simple_processor_factory.h>
+#include <opentelemetry/sdk/trace/tracer_provider_factory.h>
+#include <opentelemetry/sdk/trace/simple_processor_factory.h>
+#include <opentelemetry/sdk/trace/tracer_provider_factory.h>
+#include <opentelemetry/trace/provider.h>
+#include <opentelemetry/sdk/logs/simple_log_record_processor_factory.h>
+#include <opentelemetry/sdk/resource/semantic_conventions.h>
+
+///////////////////////////
+// Traces
+///////////////////////////
+
+opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> Traces::GetTracer()
+{
+	auto provider = opentelemetry::trace::Provider::GetTracerProvider();
+	return provider->GetTracer("foo_library_trace", OPENTELEMETRY_SDK_VERSION, "test");
+}
+
+void Traces::SampleFunction1()
+{
+  auto scoped_span = opentelemetry::trace::Scope(Traces::GetTracer()->StartSpan("Span Scope SampleFunction1"));
+}
+
+void Traces::SampleFunction2()
+{
+  auto scoped_span = opentelemetry::trace::Scope(Traces::GetTracer()->StartSpan("Span Scope SampleFunction2"));
+
+  SampleFunction1();
+  SampleFunction1();
+}
+
+
+void Traces::SampleScopeCreateSpan()
+{
+	auto scoped_span = opentelemetry::trace::Scope(Traces::GetTracer()->StartSpan("span scope main funtion"));
+	SampleFunction2();
+	SampleFunction2();
+}
+
+void Traces::SampleErrorCreateSpan()
+{
+	auto span_first  = Traces::GetTracer()->StartSpan("span err 1");
+
+	span_first->SetAttribute("attr1", 3.1);
+
+	trace_api::StartSpanOptions options;
+	options.parent   = span_first->GetContext();
+	auto span_second = Traces::GetTracer()->StartSpan("span err 2", options);
+
+	options.parent  = span_second->GetContext();
+	auto span_third = Traces::GetTracer()->StartSpan("span err 3", options);
+
+	span_second->SetStatus(opentelemetry::trace::StatusCode::kError, "emergency error");
+
+	span_third->End();
+	span_second->End();
+	span_first->End();
+}
+
+void Traces::SampleCreateSpan()
+{
+	auto span_first  = Traces::GetTracer()->StartSpan("span 1");
+
+	span_first->SetAttribute("attr1", 5.3);
+
+	trace_api::StartSpanOptions options;
+	options.parent   = span_first->GetContext();
+	auto span_second = Traces::GetTracer()->StartSpan("span 2", options);
+
+	options.parent  = span_second->GetContext();
+	auto span_third = Traces::GetTracer()->StartSpan("span 3", options);
+
+	span_second->SetStatus(opentelemetry::trace::StatusCode::kOk, "everything is awesome !!!!!!!!!!!!");
+	span_second->SetAttribute("otel.status_description", "everything is awesome !!");
+
+	span_third->End();
+	span_second->End();
+	span_first->End();
+}
+
+void Traces::Init(const std::string &url)
+{
+	opentelemetry::sdk::resource::ResourceAttributes attributes = {
+		{opentelemetry::sdk::resource::SemanticConventions::kTelemetrySdkLanguage, "cpp"},
+		{opentelemetry::sdk::resource::SemanticConventions::kTelemetrySdkName, "opentelemetry"},
+		{opentelemetry::sdk::resource::SemanticConventions::kTelemetrySdkVersion, OPENTELEMETRY_SDK_VERSION},
+		{opentelemetry::sdk::resource::SemanticConventions::kServiceName, "todolist"},
+		{"my.custom.label", "custom"},
+	};
+	auto resource = opentelemetry::sdk::resource::Resource::Create(attributes);
+
+	opentelemetry::exporter::otlp::OtlpHttpExporterOptions opts;
+	if (url.compare("") == 0) {
+		// Error
+		return;
+	}
+	opts.url = url;
+	// Create OTLP exporter instance
+	auto exporter  = opentelemetry::exporter::otlp::OtlpHttpExporterFactory::Create(opts);
+	auto processor = opentelemetry::sdk::trace::SimpleSpanProcessorFactory::Create(std::move(exporter));
+	std::shared_ptr<opentelemetry::trace::TracerProvider> provider = opentelemetry::sdk::trace::TracerProviderFactory::Create(std::move(processor), resource);
+	// Set the global trace provider
+	opentelemetry::trace::Provider::SetTracerProvider(provider);
+}
+
+///////////////////////////
+// Logs
+///////////////////////////
+
+opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger> Logs::GetLogger()
+{
+	auto provider = opentelemetry::logs::Provider::GetLoggerProvider();
+	return provider->GetLogger("fooo", "baaar");
+}
+
+
+void Logs::Init(const std::string &url)
+{
+	opentelemetry::exporter::otlp::OtlpHttpLogRecordExporterOptions opts;
+	if (url.compare("") == 0) {
+		// Error
+		return;
+	}
+	opts.url = url;
+	opts.console_debug = true;
+	// Create OTLP exporter instance
+	auto exporter  = opentelemetry::exporter::otlp::OtlpHttpLogRecordExporterFactory::Create(opts);
+	auto processor = opentelemetry::sdk::logs::SimpleLogRecordProcessorFactory::Create(std::move(exporter));
+	std::shared_ptr<opentelemetry::logs::LoggerProvider> provider = opentelemetry::sdk::logs::LoggerProviderFactory::Create(std::move(processor));
+
+	opentelemetry::logs::Provider::SetLoggerProvider(provider);
+
+	opentelemetry::sdk::common::internal_log::GlobalLogHandler::SetLogLevel(opentelemetry::sdk::common::internal_log::LogLevel::Debug);
+}
+
+void Logs::SetLogLevel(LogLevel &l)
+{
+	std::cout << "ok debug" << std::endl;
+	opentelemetry::sdk::common::internal_log::GlobalLogHandler::SetLogLevel(opentelemetry::sdk::common::internal_log::LogLevel::Debug);
+}
+
+void Logs::Error()
+{
+	auto logger = Logs::GetLogger();
+	logger->EmitLogRecord(opentelemetry::logs::Severity::kError, "body error", 
+		opentelemetry::common::SystemTimestamp(std::chrono::system_clock::now()));
+}
+namespace trace     = opentelemetry::trace;
+namespace otlp      = opentelemetry::exporter::otlp;
+namespace logs_sdk  = opentelemetry::sdk::logs;
+namespace logs      = opentelemetry::logs;
+namespace trace_sdk = opentelemetry::sdk::trace;
+
+
+void Logs::Info()
+{
+	auto logger = Logs::GetLogger();
+	logger->EmitLogRecord(opentelemetry::logs::Severity::kInfo, "body info", 
+		opentelemetry::common::SystemTimestamp(std::chrono::system_clock::now()));
+}
+
+
+///////////////////////////
+// Metrics
+///////////////////////////
 
 /// SetLogLevel
 static std::shared_mutex _mutex;
@@ -23,29 +194,29 @@ static std::map<std::string, opentelemetry::nostd::unique_ptr<opentelemetry::met
 static std::map<std::string, opentelemetry::nostd::unique_ptr<opentelemetry::metrics::Counter<double>>> _mapCounter;
 static std::map<std::string, opentelemetry::nostd::unique_ptr<opentelemetry::metrics::Histogram<double>>> _mapHistogram;
 
-void OPT::Shutdown()
+void Metrics::Shutdown()
 {
 	_profilName = "";
 	std::shared_ptr<metrics_api::MeterProvider> none;
 	metrics_api::Provider::SetMeterProvider(none);
 }
 
-OPT::OPT(const char* url, const char* profilName)
+Metrics::Metrics(const std::string &url, const std::string &profilName)
 {
-	if (url == NULL || strcmp(url, "") == 0) {
+	if (url.compare("") == 0) {
 		// Error
 		return;
 	}
-	if (profilName == NULL || strcmp(profilName, "") == 0) {
+	if (profilName.compare("") == 0) {
 		// Error
 		return;
 	}
-	if (_profilName != "") {
+	if (_profilName.compare("") != 0) {
 		// Error
 		return;
+	} else {
+		_profilName = profilName;
 	}
-
-	_profilName = std::string(profilName);
 
 	// Set URL on opts
 	metrics_exporter::PrometheusExporterOptions opts;
@@ -65,20 +236,18 @@ OPT::OPT(const char* url, const char* profilName)
 	metrics_api::Provider::SetMeterProvider(std::move(provider));
 }
 
-void OPT::CreateMetricGauge(const char* _name, const char* description)
+void Metrics::CreateMetricGauge(const std::string &name, const std::string &gauge_description)
 {
 	std::unique_lock lock(_mutex);
-	if (_name == NULL || strcmp(_name, "") == 0) {
+	if (name.compare("") == 0) {
 		// Error
 		return;
 	}
-	if (description == NULL || strcmp(description, "") == 0) {
+	if (gauge_description.compare("") == 0) {
 		// Error
 		return;
 	}
-	std::string name = std::string(_name);
 	std::string gauge_name = name + std::string("_gauge");
-	std::string gauge_description = std::string(description);
 	// Create view
 	std::unique_ptr<metrics_sdk::InstrumentSelector> instrument_selector{
 		new metrics_sdk::InstrumentSelector(metrics_sdk::InstrumentType::kUpDownCounter, gauge_name)};
@@ -95,20 +264,18 @@ void OPT::CreateMetricGauge(const char* _name, const char* description)
 	_mapGauge[name] = std::move(double_gauge);
 }
 
-void OPT::CreateMetricGaugeLastValue(const char* _name, const char* description)
+void Metrics::CreateMetricGaugeLastValue(const std::string &name, const std::string &gauge_description)
 {
 	std::unique_lock lock(_mutex);
-	if (_name == NULL || strcmp(_name, "") == 0) {
+	if (name.compare("") == 0) {
 		// Error
 		return;
 	}
-	if (description == NULL || strcmp(description, "") == 0) {
+	if (gauge_description.compare("") == 0) {
 		// Error
 		return;
 	}
-	std::string name = std::string(_name);
 	std::string gauge_name = name + std::string("_gauge");
-	std::string gauge_description = std::string(description);
 	// Create view
 	std::unique_ptr<metrics_sdk::InstrumentSelector> instrument_selector{
 		new metrics_sdk::InstrumentSelector(metrics_sdk::InstrumentType::kCounter, gauge_name)};
@@ -125,20 +292,18 @@ void OPT::CreateMetricGaugeLastValue(const char* _name, const char* description)
 	_mapGaugeLastValue[name] = std::move(double_gauge);
 }
 
-void OPT::CreateMetricCounter(const char* _name, const char* description)
+void Metrics::CreateMetricCounter(const std::string &name, const std::string &counter_description)
 {
 	std::unique_lock lock(_mutex);
-	if (_name == NULL || strcmp(_name, "") == 0) {
+	if (name.compare("") == 0) {
 		// Error
 		return;
 	}
-	if (description == NULL || strcmp(description, "") == 0) {
+	if (counter_description.compare("") == 0) {
 		// Error
 		return;
 	}
-	std::string name = std::string(_name);
 	std::string counter_name = name + std::string("_counter");
-	std::string counter_description = std::string(description);
 	// Create view
 	std::unique_ptr<metrics_sdk::InstrumentSelector> instrument_selector{
 		new metrics_sdk::InstrumentSelector(metrics_sdk::InstrumentType::kCounter, counter_name)};
@@ -155,21 +320,19 @@ void OPT::CreateMetricCounter(const char* _name, const char* description)
 	_mapCounter[name] = std::move(double_counter);
 }
 
-void OPT::CreateMetricHistogram(const char* _name, const char* description)
+void Metrics::CreateMetricHistogram(const std::string &name, const std::string &histogram_description)
 {
 	std::unique_lock lock(_mutex);
-	if (_name == NULL || strcmp(_name, "") == 0) {
+	if (name.compare("") == 0) {
 		// Error
 		return;
 	}
-	if (description == NULL || strcmp(description, "") == 0) {
+	if (histogram_description.compare("") == 0) {
 		// Error
 		return;
 	}
 	// Already exist
-	std::string name = std::string(_name);
 	std::string histogram_name = name + std::string("_histogram");
-	std::string histogram_description = std::string(description);
 	std::unique_ptr<metrics_sdk::InstrumentSelector> histogram_instrument_selector{
 		new metrics_sdk::InstrumentSelector(metrics_sdk::InstrumentType::kHistogram, histogram_name)};
 	std::unique_ptr<metrics_sdk::MeterSelector> histogram_meter_selector{
@@ -185,14 +348,14 @@ void OPT::CreateMetricHistogram(const char* _name, const char* description)
 	_mapHistogram[name] = std::move(double_histogram);
 }
 
-void OPT::UpdateMeterGaugeAdd(const char* name, double val, std::map<std::string, std::string> labels)
+void Metrics::UpdateMeterGaugeAdd(const std::string &name, double val, std::map<std::string, std::string> labels)
 {
 	std::unique_lock lock(_mutex);
 	if (_profilName == "") {
 		// Error
 		return;
 	}
-	if (name == NULL || strcmp(name, "") == 0) {
+	if (name.compare("") == 0) {
 		// Error
 		return;
 	}
@@ -214,14 +377,14 @@ void OPT::UpdateMeterGaugeAdd(const char* name, double val, std::map<std::string
 	search->second->Add(val, labelkv, context);
 }
 
-void OPT::UpdateMeterGaugeLastValueSet(const char* name, double val, std::map<std::string, std::string> labels)
+void Metrics::UpdateMeterGaugeLastValueSet(const std::string &name, double val, std::map<std::string, std::string> labels)
 {
 	std::unique_lock lock(_mutex);
 	if (_profilName == "") {
 		// Error
 		return;
 	}
-	if (name == NULL || strcmp(name, "") == 0) {
+	if (name.compare("") == 0) {
 		// Error
 		return;
 	}
@@ -244,14 +407,14 @@ void OPT::UpdateMeterGaugeLastValueSet(const char* name, double val, std::map<st
 
 }
 
-void OPT::UpdateMeterCounterAdd(const char* name, double val, std::map<std::string, std::string> labels)
+void Metrics::UpdateMeterCounterAdd(const std::string &name, double val, std::map<std::string, std::string> labels)
 {
 	std::unique_lock lock(_mutex);
 	if (_profilName == "") {
 		// Error
 		return;
 	}
-	if (name == NULL || strcmp(name, "") == 0) {
+	if (name.compare("") == 0) {
 		// Error
 		return;
 	}
@@ -273,18 +436,18 @@ void OPT::UpdateMeterCounterAdd(const char* name, double val, std::map<std::stri
 	search->second->Add(val, labelkv, context);
 }
 
-void OPT::UpdateMeterHistogramRecord(const char* name, double val, std::map<std::string, std::string> labels)
+void Metrics::UpdateMeterHistogramRecord(const std::string &name, double val, std::map<std::string, std::string> labels)
 {
 	std::unique_lock lock(_mutex);
 	if (_profilName == "") {
 		// Error
 		return;
 	}
-	if (name == NULL || strcmp(name, "") == 0) {
+	if (name.compare("") == 0) {
 		// Error
 		return;
 	}
-	std::string histogram_name = std::string(name) + std::string("_histogram");
+	std::string histogram_name = name + std::string("_histogram");
 	// Init somes vars
 	auto context = opentelemetry::context::Context{};
 	auto labelkv = opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
@@ -302,25 +465,25 @@ void OPT::UpdateMeterHistogramRecord(const char* name, double val, std::map<std:
 	search->second->Record(val, labelkv, context);
 }
 
-void OPT::UpdateMeterGaugeAdd(const char* name, double val)
+void Metrics::UpdateMeterGaugeAdd(const std::string &name, double val)
 {
 	std::map<std::string, std::string> labels;
 	UpdateMeterGaugeAdd(name, val, labels);
 }
 
-void OPT::UpdateMeterGaugeLastValueSet(const char* name, double val)
+void Metrics::UpdateMeterGaugeLastValueSet(const std::string &name, double val)
 {
 	std::map<std::string, std::string> labels;
 	UpdateMeterGaugeLastValueSet(name, val, labels);
 }
 
-void OPT::UpdateMeterCounterAdd(const char* name, double val)
+void Metrics::UpdateMeterCounterAdd(const std::string &name, double val)
 {
 	std::map<std::string, std::string> labels;
 	UpdateMeterCounterAdd(name, val, labels);
 }
 
-void OPT::UpdateMeterHistogramRecord(const char* name, double val)
+void Metrics::UpdateMeterHistogramRecord(const std::string &name, double val)
 {
 	std::map<std::string, std::string> labels;
 	UpdateMeterHistogramRecord(name, val, labels);

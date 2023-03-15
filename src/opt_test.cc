@@ -5,25 +5,25 @@
 int main() {
 	std::cout << "Init" << std::endl;
 {
-	auto opt = new OPT("127.0.0.1:8081", "opt_todolist");
-	opt->CreateMetricGauge("mygaugemeter", "DESC Gauge with UP and DOWN");
-	opt->CreateMetricGaugeLastValue("mygaugelastvaluemeter", "DESC Gauge with Last Value");
-	opt->CreateMetricCounter("mycountermeter", "DESC Gauge with UP and DOWN");
+	auto metrics = new Metrics("127.0.0.1:8081", "metrics_todolist");
+	metrics->CreateMetricGauge("mygaugemeter", "DESC Gauge with UP and DOWN");
+	metrics->CreateMetricGaugeLastValue("mygaugelastvaluemeter", "DESC Gauge with Last Value");
+	metrics->CreateMetricCounter("mycountermeter", "DESC Gauge with UP and DOWN");
 }
 	sleep(1);
 
 	std::cout << "Updates metrics" << std::endl;
-	OPT::UpdateMeterGaugeAdd("mygaugemeter", 777);
-	OPT::UpdateMeterGaugeAdd("mygaugemeter", -77);
-	OPT::UpdateMeterGaugeLastValueSet("mygaugelastvaluemeter", 66);
-	OPT::UpdateMeterGaugeLastValueSet("mygaugelastvaluemeter", 55);
-	OPT::UpdateMeterCounterAdd("mycountermeter", 100);
-	OPT::UpdateMeterCounterAdd("mycountermeter", 100);
+	Metrics::UpdateMeterGaugeAdd("mygaugemeter", 777);
+	Metrics::UpdateMeterGaugeAdd("mygaugemeter", -77);
+	Metrics::UpdateMeterGaugeLastValueSet("mygaugelastvaluemeter", 66);
+	Metrics::UpdateMeterGaugeLastValueSet("mygaugelastvaluemeter", 55);
+	Metrics::UpdateMeterCounterAdd("mycountermeter", 100);
+	Metrics::UpdateMeterCounterAdd("mycountermeter", 100);
 
 	sleep(5);
 
 	std::cout << "Shutdown" << std::endl;
-	OPT::Shutdown();
+	Metrics::Shutdown();
 
 	sleep(5);
 

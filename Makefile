@@ -6,8 +6,8 @@ PYTHON_VERSION=3
 PYTHON=/usr/bin/python${PYTHON_VERSION}
 FILE?=
 CXXFLAGS= `python${PYTHON_VERSION}-config --cflags`
-CXXFLAGS_OPT= -I/usr/local/include/ -L/usr/local/lib/ -lopentelemetry_resources -lopentelemetry_common -lopentelemetry_metrics -lopentelemetry_exporter_prometheus -lprometheus-cpp-pull -lprometheus-cpp-core -lpthread -lm -lz -lc
-DEBUGFLAGS=
+CXXFLAGS_OPT= -I/usr/local/include/ -L/usr/local/lib/ -lopentelemetry_resources -lopentelemetry_common -lopentelemetry_metrics -lopentelemetry_exporter_prometheus -lprometheus-cpp-pull -lprometheus-cpp-core -lpthread -lm -lz -lc  -DENABLE_LOGS_PREVIEW -lopentelemetry_exporter_ostream_span -lopentelemetry_exporter_ostream_logs -lopentelemetry_trace -lopentelemetry_logs -lopentelemetry_exporter_otlp_http -lopentelemetry_exporter_otlp_http_log
+DEBUGFLAGS= 
 
 all:
 	g++ -std=c++17 -c -fPIC ${DEBUGFLAGS} ${SRC}/todolist.cc -o ${SRC}/todolist.o ${CXXFLAGS}

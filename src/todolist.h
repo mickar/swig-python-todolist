@@ -20,8 +20,8 @@ class todolist {
 		todolist(const char *name = NULL);
 		~todolist();
 
-		void addTodo(const char* taskname, const char* tasktodo);  
-		void delTodo(const char* taskname);
+		void addTodo(const std::string &taskname, const std::string &tasktodo);  
+		void delTodo(const std::string &taskname);
 		void dumpAllTodo();
 		static const char* version();
 		static void UnderstandGILBlocked();

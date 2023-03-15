@@ -1,0 +1,31 @@
+apiVersion: 1
+
+deleteDatasources:
+  - name: loki
+  - name: prometheus
+  - name: jaeger
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    url: http://prometheus:9090
+    uid: todolist-metrics
+    editable: true
+    isDefault: true
+
+  - name: Jaeger
+    type: jaeger
+    url: http://jaeger:16686/jaeger/ui
+    uid: todolist-traces
+    editable: true
+    isDefault: false
+
+  - name: Loki
+    type: loki
+    access: proxy
+    orgId: 1
+    url: http://loki:3100
+    basicAuth: false
+    isDefault: false
+    version: 1
+    editable: false

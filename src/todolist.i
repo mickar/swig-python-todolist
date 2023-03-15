@@ -4,9 +4,15 @@
 %}
 
 %include "std_string.i"
+%inline %{
+using namespace std;
+%}
+
 %include "std_map.i"
 
-%newobject OPT;
+%newobject Metrics;
+%newobject Logs;
+%newobject Traces;
 
 namespace std {
     %template(OpentelemetryLabels) map<string, string>;
