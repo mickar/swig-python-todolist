@@ -10,7 +10,7 @@ CXXFLAGS_OPT= -I/usr/local/include/ -L/usr/local/lib/ -lopentelemetry_resources 
 DEBUGFLAGS= 
 
 all:
-	g++ -std=c++17 -c -fPIC ${DEBUGFLAGS} ${SRC}/todolist.cc -o ${SRC}/todolist.o ${CXXFLAGS}
+	g++ -std=c++17 -c -fPIC ${DEBUGFLAGS} ${SRC}/todolist.cc -o ${SRC}/todolist.o ${CXXFLAGS} ${CXXFLAGS_OPT}
 	swig -c++ -python -o ${SRC}/todolist_wrap.cxx ${SRC}/todolist.i
 	g++ -std=c++17 -c -fPIC ${DEBUGFLAGS} -I${SRC}/ ${SRC}/todolist_wrap.cxx -o ${SRC}/todolist_wrap.o ${CXXFLAGS} ${CXXFLAGS_OPT}
 	g++ -std=c++17 -c -fPIC ${DEBUGFLAGS} ${SRC}/opt.cc -o ${SRC}/opt.o ${CXXFLAGS} ${CXXFLAGS_OPT}
