@@ -1,0 +1,40 @@
+data_dir = "/var/lib/vector/"
+
+[api]
+enabled = true
+
+[sources.otel]
+type = "opentelemetry"
+  [sources.otel.acknowledgements]
+  [sources.otel.grpc]
+  address = "0.0.0.0:4317"
+  [sources.otel.http]
+  address = "0.0.0.0:4318"
+  [sources.internal_metrics]
+  type = "internal_metrics"
+
+[sinks.console]
+inputs = ["otel.logs"]
+target = "stdout"
+type = "console"
+  [sinks.console.encoding]
+  codec = "json"
+  [sinks.console.healthcheck]
+  enabled = true
+  [sinks.console.buffer]
+  type = "memory"
+  max_events = 500
+  when_full = "block"
+
+[sinks.metrics]
+type = "prometheus_exporter"
+inputs = [ "internal_metrics" ]
+address = "0.0.0.0:9090"
+
+[sinks.sink_loki]
+type = "loki"
+inputs = [ "otel.logs" ]
+endpoint = "http://loki:3100"
+labels.datasource = "source_opentelemetry"
+out_of_order_action = "rewrite_timestamp"
+encoding.codec = "json"
