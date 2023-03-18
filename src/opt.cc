@@ -7,7 +7,7 @@
 
 static std::string _profilName = "";
 static std::string _version = "1.2.0";
-static std::string _schema = "https://opentelemetry.io/schemas/1.2.0";
+static std::string _schema = "https://opentelemetry.io/schemas/1.19.0";
 
 namespace metrics_sdk = opentelemetry::sdk::metrics;
 namespace common = opentelemetry::common;
@@ -27,10 +27,201 @@ namespace metrics_api = opentelemetry::metrics;
 #include <opentelemetry/trace/provider.h>
 #include <opentelemetry/sdk/logs/simple_log_record_processor_factory.h>
 #include <opentelemetry/sdk/resource/semantic_conventions.h>
+#include <opentelemetry/trace/propagation/http_trace_context.h>
+#include <opentelemetry/trace/propagation/detail/hex.h>
+#include <opentelemetry/trace/propagation/detail/string.h>
 
 ///////////////////////////
-// Traces
+// Tracing
 ///////////////////////////
+
+//////////////
+// Context
+/////////////
+
+Context::Context(const opentelemetry::trace::SpanContext &ctx)
+{
+	this->_spanContext = ctx;
+}
+
+Context Context::Extract(const std::string &traceParent, const std::string &traceState)
+{
+	return Context(traceParent, traceState);
+}
+
+Context::Context(const std::string &traceParent, const std::string &traceState)
+{
+	if (traceParent.size() != opentelemetry::trace::propagation::kTraceParentSize)
+	{
+		// Error
+		this->_spanContext = opentelemetry::trace::SpanContext::GetInvalid();
+	}
+
+	std::array<opentelemetry::nostd::string_view, 4> fields{};
+	if (opentelemetry::trace::propagation::detail::SplitString(traceParent, '-', fields.data(), 4) != 4)
+	{
+		// Error
+		this->_spanContext = opentelemetry::trace::SpanContext::GetInvalid();
+	}
+
+	opentelemetry::nostd::string_view versionHex    = fields[0];
+	opentelemetry::nostd::string_view traceIDHex    = fields[1];
+	opentelemetry::nostd::string_view spanIDHex     = fields[2];
+	opentelemetry::nostd::string_view traceFlagsHex = fields[3];
+
+	if (versionHex.size() != opentelemetry::trace::propagation::kVersionSize || traceIDHex.size() != opentelemetry::trace::propagation::kTraceIdSize ||
+			spanIDHex.size() != opentelemetry::trace::propagation::kSpanIdSize || traceFlagsHex.size() != opentelemetry::trace::propagation::kTraceFlagsSize)
+	{
+		// Error
+		this->_spanContext = opentelemetry::trace::SpanContext::GetInvalid();
+	}
+
+	if (!opentelemetry::trace::propagation::detail::IsValidHex(versionHex) || !opentelemetry::trace::propagation::detail::IsValidHex(traceIDHex) ||
+			!opentelemetry::trace::propagation::detail::IsValidHex(spanIDHex) || !opentelemetry::trace::propagation::detail::IsValidHex(traceFlagsHex))
+	{
+		// Error
+		this->_spanContext = opentelemetry::trace::SpanContext::GetInvalid();
+	}
+
+	if (!IsValidVersion(versionHex))
+	{
+		// Error
+		this->_spanContext = opentelemetry::trace::SpanContext::GetInvalid();
+	}
+
+	opentelemetry::trace::TraceId traceID = TraceIdFromHex(traceIDHex);
+	opentelemetry::trace::SpanId spanID   = SpanIdFromHex(spanIDHex);
+
+	if (!traceID.IsValid() || !spanID.IsValid())
+	{
+		// Error
+		this->_spanContext = opentelemetry::trace::SpanContext::GetInvalid();
+	}
+
+	this->_spanContext = opentelemetry::trace::SpanContext(traceID, spanID, TraceFlagsFromHex(traceFlagsHex), true, opentelemetry::trace::TraceState::FromHeader(traceState));
+}
+
+opentelemetry::trace::SpanContext Context::GetOpentelemetryContext() const
+{
+	return this->_spanContext;
+}
+
+opentelemetry::trace::TraceId Context::TraceIdFromHex(opentelemetry::nostd::string_view traceID)
+{
+	uint8_t buf[opentelemetry::trace::propagation::kTraceIdSize / 2];
+	opentelemetry::trace::propagation::detail::HexToBinary(traceID, buf, sizeof(buf));
+	return opentelemetry::trace::TraceId(buf);
+}
+
+opentelemetry::trace::SpanId Context::SpanIdFromHex(opentelemetry::nostd::string_view spanID)
+{
+	uint8_t buf[opentelemetry::trace::propagation::kSpanIdSize / 2];
+	opentelemetry::trace::propagation::detail::HexToBinary(spanID, buf, sizeof(buf));
+	return opentelemetry::trace::SpanId(buf);
+}
+
+opentelemetry::trace::TraceFlags Context::TraceFlagsFromHex(opentelemetry::nostd::string_view traceFlags)
+{
+	uint8_t flags;
+	opentelemetry::trace::propagation::detail::HexToBinary(traceFlags, &flags, sizeof(flags));
+	return opentelemetry::trace::TraceFlags(flags);
+}
+
+bool Context::IsValidVersion(opentelemetry::nostd::string_view versionHex)
+{
+	uint8_t version;
+	opentelemetry::trace::propagation::detail::HexToBinary(versionHex, &version, sizeof(version));
+	return version != kInvalidVersion;
+}
+
+std::string Context::Inject()
+{
+	char traceParent[opentelemetry::trace::propagation::kTraceParentSize];
+	traceParent[0] = '0';
+	traceParent[1] = '0';
+	traceParent[2] = '-';
+	_spanContext.trace_id().ToLowerBase16( opentelemetry::nostd::span<char, 2 * opentelemetry::trace::TraceId::kSize>{&traceParent[3], opentelemetry::trace::propagation::kTraceIdSize});
+	traceParent[opentelemetry::trace::propagation::kTraceIdSize + 3] = '-';
+	_spanContext.span_id().ToLowerBase16( opentelemetry::nostd::span<char, 2 * opentelemetry::trace::SpanId::kSize>{&traceParent[opentelemetry::trace::propagation::kTraceIdSize + 4], opentelemetry::trace::propagation::kSpanIdSize});
+	traceParent[opentelemetry::trace::propagation::kTraceIdSize + opentelemetry::trace::propagation::kSpanIdSize + 4] = '-';
+	_spanContext.trace_flags().ToLowerBase16( opentelemetry::nostd::span<char, 2>{&traceParent[opentelemetry::trace::propagation::kTraceIdSize + opentelemetry::trace::propagation::kSpanIdSize + 5], 2});
+	return std::string(traceParent);
+}
+
+//////////////
+// Span
+/////////////
+
+Span::Span(const Context &ctx, const std::string name)
+{
+	auto tracer = Traces::GetTracer();
+	if (tracer == nullptr) {
+		// Error
+		return;
+	}
+	opentelemetry::trace::StartSpanOptions options;
+	options.parent = ctx.GetOpentelemetryContext();
+	this->_span = tracer->StartSpan(name, options);
+}
+
+Span::Span(const std::string name)
+{
+	auto tracer = Traces::GetTracer();
+	if (tracer == nullptr) {
+		// Error
+		return;
+	}
+	this->_span = tracer->StartSpan(name);
+}
+
+Context Span::GetContext()
+{
+	return Context(this->_span->GetContext());
+}
+
+void Span::End()
+{
+	this->_span->End();
+}
+
+void Span::SetAttribute(const std::string &key, bool value)
+{
+	this->_span->SetAttribute(key, value);
+}
+
+void Span::SetAttribute(const std::string &key, int32_t value)
+{
+	this->_span->SetAttribute(key, value);
+}
+
+void Span::SetAttribute(const std::string &key, uint32_t value)
+{
+	this->_span->SetAttribute(key, value);
+}
+
+void Span::SetAttribute(const std::string &key, int64_t value)
+{
+	this->_span->SetAttribute(key, value);
+}
+
+void Span::SetAttribute(const std::string &key, uint64_t value)
+{
+	this->_span->SetAttribute(key, value);
+}
+
+void Span::SetAttribute(const std::string &key, double value)
+{
+	this->_span->SetAttribute(key, value);
+}
+
+void Span::SetAttribute(const std::string &key, const std::string &value)
+{
+	this->_span->SetAttribute(key, value);
+}
+
+//////////////
+// Traces
+/////////////
 
 opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> Traces::GetTracer()
 {
@@ -65,7 +256,7 @@ void Traces::SampleErrorCreateSpan()
 
 	span_first->SetAttribute("attr1", 3.1);
 
-	trace_api::StartSpanOptions options;
+	opentelemetry::trace::StartSpanOptions options;
 	options.parent   = span_first->GetContext();
 	auto span_second = Traces::GetTracer()->StartSpan("span err 2", options);
 
@@ -85,7 +276,7 @@ void Traces::SampleCreateSpan()
 
 	span_first->SetAttribute("attr1", 5.3);
 
-	trace_api::StartSpanOptions options;
+	opentelemetry::trace::StartSpanOptions options;
 	options.parent   = span_first->GetContext();
 	auto span_second = Traces::GetTracer()->StartSpan("span 2", options);
 
@@ -132,7 +323,14 @@ void Traces::Init(const std::string &url)
 opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger> Logs::GetLogger()
 {
 	auto provider = opentelemetry::logs::Provider::GetLoggerProvider();
-	return provider->GetLogger("fooo", "baaar");
+	std::unordered_map<std::string, std::string> attributes = {
+		{opentelemetry::sdk::resource::SemanticConventions::kTelemetrySdkLanguage, "cpp"},
+		{opentelemetry::sdk::resource::SemanticConventions::kTelemetrySdkName, "opentelemetry"},
+		{opentelemetry::sdk::resource::SemanticConventions::kTelemetrySdkVersion, OPENTELEMETRY_SDK_VERSION},
+		{opentelemetry::sdk::resource::SemanticConventions::kServiceName, "todolist"},
+		{"my.custom.label", "custom"},
+	};
+	return provider->GetLogger("todolist", "opentelelemtry_library", "1.19.0", _schema, true, attributes);
 }
 
 
@@ -161,24 +359,64 @@ void Logs::SetLogLevel(LogLevel &l)
 	opentelemetry::sdk::common::internal_log::GlobalLogHandler::SetLogLevel(opentelemetry::sdk::common::internal_log::LogLevel::Debug);
 }
 
-void Logs::Error()
+void Logs::Error(const std::string &body, std::map<std::string, std::string> attributes)
 {
 	auto logger = Logs::GetLogger();
-	logger->EmitLogRecord(opentelemetry::logs::Severity::kError, "body error", 
-		opentelemetry::common::SystemTimestamp(std::chrono::system_clock::now()));
+	logger->EmitLogRecord(opentelemetry::logs::Severity::kError, body,
+			opentelemetry::common::SystemTimestamp(std::chrono::system_clock::now()), attributes);
 }
-namespace trace     = opentelemetry::trace;
-namespace otlp      = opentelemetry::exporter::otlp;
-namespace logs_sdk  = opentelemetry::sdk::logs;
-namespace logs      = opentelemetry::logs;
-namespace trace_sdk = opentelemetry::sdk::trace;
 
-
-void Logs::Info()
+void Logs::Warn(const std::string &body, std::map<std::string, std::string> attributes)
 {
 	auto logger = Logs::GetLogger();
-	logger->EmitLogRecord(opentelemetry::logs::Severity::kInfo, "body info", 
-		opentelemetry::common::SystemTimestamp(std::chrono::system_clock::now()));
+	logger->EmitLogRecord(opentelemetry::logs::Severity::kWarn, body,
+			opentelemetry::common::SystemTimestamp(std::chrono::system_clock::now()), attributes);
+}
+
+void Logs::Info(const std::string &body, std::map<std::string, std::string> attributes)
+{
+	auto logger = Logs::GetLogger();
+	logger->EmitLogRecord(opentelemetry::logs::Severity::kInfo, body,
+			opentelemetry::common::SystemTimestamp(std::chrono::system_clock::now()), attributes);
+}
+
+void Logs::Debug(const std::string &body, std::map<std::string, std::string> attributes)
+{
+	auto logger = Logs::GetLogger();
+	logger->EmitLogRecord(opentelemetry::logs::Severity::kDebug, body,
+			opentelemetry::common::SystemTimestamp(std::chrono::system_clock::now()), attributes);
+}
+
+void Logs::Error(const Context &ctx, const std::string &body, std::map<std::string, std::string> attributes)
+{
+	auto logger = Logs::GetLogger();
+	logger->EmitLogRecord(opentelemetry::logs::Severity::kError, body,
+			ctx.GetOpentelemetryContext().trace_id(), ctx.GetOpentelemetryContext().span_id(), ctx.GetOpentelemetryContext().trace_flags(),
+			opentelemetry::common::SystemTimestamp(std::chrono::system_clock::now()), attributes);
+}
+
+void Logs::Warn(const Context &ctx, const std::string &body, std::map<std::string, std::string> attributes)
+{
+	auto logger = Logs::GetLogger();
+	logger->EmitLogRecord(opentelemetry::logs::Severity::kWarn, body,
+			ctx.GetOpentelemetryContext().trace_id(), ctx.GetOpentelemetryContext().span_id(), ctx.GetOpentelemetryContext().trace_flags(),
+			opentelemetry::common::SystemTimestamp(std::chrono::system_clock::now()), attributes);
+}
+
+void Logs::Info(const Context &ctx, const std::string &body, std::map<std::string, std::string> attributes)
+{
+	auto logger = Logs::GetLogger();
+	logger->EmitLogRecord(opentelemetry::logs::Severity::kInfo, body,
+			ctx.GetOpentelemetryContext().trace_id(), ctx.GetOpentelemetryContext().span_id(), ctx.GetOpentelemetryContext().trace_flags(),
+			opentelemetry::common::SystemTimestamp(std::chrono::system_clock::now()), attributes);
+}
+
+void Logs::Debug(const Context &ctx, const std::string &body, std::map<std::string, std::string> attributes)
+{
+	auto logger = Logs::GetLogger();
+	logger->EmitLogRecord(opentelemetry::logs::Severity::kDebug, body,
+			ctx.GetOpentelemetryContext().trace_id(), ctx.GetOpentelemetryContext().span_id(), ctx.GetOpentelemetryContext().trace_flags(),
+			opentelemetry::common::SystemTimestamp(std::chrono::system_clock::now()), attributes);
 }
 
 

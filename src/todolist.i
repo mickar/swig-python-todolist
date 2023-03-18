@@ -13,10 +13,15 @@ using namespace std;
 %newobject Metrics;
 %newobject Logs;
 %newobject Traces;
+%newobject Span;
 
 namespace std {
     %template(OpentelemetryLabels) map<string, string>;
 }
+
+%ignore Context::Context;
+%ignore Context::GetOpentelemetryContext;
+%ignore Traces::GetTracer;
 
 %catches(todoerror) todolist::addTodo(const char* taskname, const char* tasktodo);
 %catches(todoerror) todolist::delTodo(const char* taskname);

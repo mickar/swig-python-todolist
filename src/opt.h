@@ -1,6 +1,8 @@
 #ifndef OPENTELEMTRY_PROMETHEUS_PYTHON_H
 #define OPENTELEMTRY_PROMETHEUS_PYTHON_H
 
+#include <any>
+
 #include <opentelemetry/exporters/prometheus/exporter.h>
 #include <opentelemetry/metrics/provider.h>
 #include <opentelemetry/sdk/metrics/aggregation/default_aggregation.h>
@@ -17,7 +19,7 @@
 #include <opentelemetry/logs/provider.h>
 #include <opentelemetry/sdk/version/version.h>
 #include <opentelemetry/trace/provider.h>
-
+#include <opentelemetry/trace/propagation/http_trace_context.h>
 
 enum class LogLevel
 {
@@ -27,14 +29,54 @@ enum class LogLevel
 	Debug
 };
 
+class Context {
+	private:
+		static constexpr uint8_t kInvalidVersion = 0xFF;
+		static bool IsValidVersion(opentelemetry::nostd::string_view version_hex);
+		static opentelemetry::trace::TraceId TraceIdFromHex(opentelemetry::nostd::string_view trace_id);
+		static opentelemetry::trace::SpanId SpanIdFromHex(opentelemetry::nostd::string_view span_id);
+		static opentelemetry::trace::TraceFlags TraceFlagsFromHex(opentelemetry::nostd::string_view trace_flags);
+		//static constexpr int TraceIDSize = 16;
+		//static constexpr int SpanIDSize = 16;
+		opentelemetry::trace::SpanContext _spanContext = opentelemetry::trace::SpanContext(false, false);
+	public:
+		Context(const opentelemetry::trace::SpanContext &ctx);
+		Context(const std::string &traceParent, const std::string &traceState);
+		std::string Inject();
+		static Context Extract(const std::string &traceParent, const std::string &traceState);
+
+		opentelemetry::trace::SpanContext GetOpentelemetryContext(void) const;
+};
+
+class Span {
+	private:
+		opentelemetry::nostd::shared_ptr<opentelemetry::trace::Span> _span;
+	public:
+		Span(const Context &ctx, const std::string name);
+		Span(const std::string name);
+
+		Context GetContext(void);
+		void End(void);
+
+		void SetAttribute(const std::string &key, bool value);
+		void SetAttribute(const std::string &key, int32_t value);
+		void SetAttribute(const std::string &key, uint32_t value);
+		void SetAttribute(const std::string &key, int64_t value);
+		void SetAttribute(const std::string &key, uint64_t value);
+		void SetAttribute(const std::string &key, double value);
+		void SetAttribute(const std::string &key, const std::string &value);
+};
+
 class Traces {
 	private:
 		static void SampleFunction1();
 		static void SampleFunction2();
 	protected:
-		static opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> GetTracer();
 	public:
+		static opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> GetTracer();
 		static void Init(const std::string &url);
+
+		// Sample
 		static void SampleCreateSpan();
 		static void SampleErrorCreateSpan();
 		static void SampleScopeCreateSpan();
@@ -47,8 +89,14 @@ class Logs {
 	public:
 		static void Init(const std::string &url);
 		static void SetLogLevel(LogLevel &l);
-		static void Info(void);
-		static void Error(void);
+		static void Debug(const Context &ctx, const std::string &body, std::map<std::string, std::string> attributes = {});
+		static void Info(const Context &ctx, const std::string &body, std::map<std::string, std::string> attributes = {});
+		static void Warn(const Context &ctx, const std::string &body, std::map<std::string, std::string> attributes = {});
+		static void Error(const Context &ctx, const std::string &body, std::map<std::string, std::string> attributes = {});
+		static void Debug(const std::string &body, std::map<std::string, std::string> attributes = {});
+		static void Info(const std::string &body, std::map<std::string, std::string> attributes = {});
+		static void Warn(const std::string &body, std::map<std::string, std::string> attributes = {});
+		static void Error(const std::string &body, std::map<std::string, std::string> attributes = {});
 };
 
 class Metrics {
